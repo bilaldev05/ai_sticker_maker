@@ -1,0 +1,9 @@
+fastapi
+uvicorn
+pydantic
+Pillow
+python-multipart
+torch          # GPU recommended
+diffusers[torch]
+transformers
+rembg
