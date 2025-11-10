@@ -7,3 +7,6 @@ torch          # GPU recommended
 diffusers[torch]
 transformers
 rembg
+transformers
+torchaudio
+

@@ -1,45 +1,64 @@
 from fastapi import FastAPI, File, UploadFile, Form
 from fastapi.responses import FileResponse
+from fastapi.middleware.cors import CORSMiddleware
 from pathlib import Path
 from PIL import Image
 import io
 import torch
-from diffusers import StableDiffusionPipeline, DPMSolverMultistepScheduler
-from diffusers.loaders import LoraLoaderMixin
+from diffusers import StableDiffusionPipeline
 import numpy as np
+from transformers import pipeline
+from tempfile import NamedTemporaryFile
 
-app = FastAPI(title="AI Sticker Generator")
+# -------------------------------------------------
+# App setup
+# -------------------------------------------------
+app = FastAPI(title="⚡ Fast AI Sticker Generator")
 
-# Output folder for stickers
+# Allow frontend access (Flutter web)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # You can later restrict this to your domain
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# -------------------------------------------------
+# Paths & model config
+# -------------------------------------------------
 OUTPUT_DIR = Path("generated_stickers")
 OUTPUT_DIR.mkdir(exist_ok=True)
 
-# -------------------------------
-# Load Stable Diffusion base model + LoRA adapter
-# -------------------------------
-MODEL_BASE = "runwayml/stable-diffusion-v1-5"
-LORA_ADAPTER = Path("artificialguybr_stickers-redmond-1-5.safetensors")  # local LoRA file
+MODEL_BASE = "stabilityai/sd-turbo"  # ⚡ FAST model
+device = "cuda" if torch.cuda.is_available() else "cpu"
+dtype = torch.float16 if device == "cuda" else torch.float32
 
-print("Loading Stable Diffusion pipeline... this may take a while.")
+print("🚀 Loading SD-Turbo model... (this is fast)")
 pipe = StableDiffusionPipeline.from_pretrained(
     MODEL_BASE,
-    torch_dtype=torch.float16,
-    use_auth_token=True  # Replace with your Hugging Face token if needed
+    torch_dtype=dtype,
+    safety_checker=None,
 )
+pipe = pipe.to(device)
+pipe.enable_attention_slicing()
 
-# Apply LoRA adapter
-LoraLoaderMixin.load_lora_weights(pipe.unet, LORA_ADAPTER, weight=1.0)
-pipe.set_scheduler(DPMSolverMultistepScheduler.from_config(pipe.scheduler.config))
-pipe = pipe.to("cuda") if torch.cuda.is_available() else pipe.to("cpu")
-print("Model loaded successfully!")
+if device == "cuda":
+    pipe.enable_xformers_memory_efficient_attention()
 
-# -------------------------------
-# Helper function: make transparent background
-# -------------------------------
+print("✅ SD-Turbo model ready on", device)
+
+# -------------------------------------------------
+# Whisper model (for voice → text)
+# -------------------------------------------------
+print("🎤 Loading Whisper model...")
+speech2text = pipeline("automatic-speech-recognition", model="openai/whisper-small")
+print("✅ Whisper model loaded!")
+
+# -------------------------------------------------
+# Helper: Make background transparent
+# -------------------------------------------------
 def make_transparent(img: Image.Image, bg_color=(255, 255, 255)) -> Image.Image:
-    """
-    Convert white (or specified bg_color) background to transparent
-    """
     img = img.convert("RGBA")
     data = np.array(img)
     r, g, b, a = data.T
@@ -47,51 +66,73 @@ def make_transparent(img: Image.Image, bg_color=(255, 255, 255)) -> Image.Image:
     data[..., 3][mask] = 0
     return Image.fromarray(data)
 
-# -------------------------------
+# -------------------------------------------------
 # Routes
-# -------------------------------
+# -------------------------------------------------
 @app.get("/")
 def home():
-    return {"message": "Welcome to the AI Sticker Generator API"}
+    return {"message": "Welcome to the ⚡ Fast AI Sticker Generator API!"}
 
-# Text → Sticker
+# ------------------------------
+# TEXT → STICKER
+# ------------------------------
 @app.post("/generate_sticker")
 async def generate_sticker(text: str = Form(...)):
-    """
-    Takes text input and generates a 512x512 sticker PNG
-    """
-    prompt = f"{text}, cartoon style, bright colors, sticker, bold outlines, flat colors, vector style"
-    
-    # Generate image
-    image = pipe(prompt, height=512, width=512).images[0]
+    prompt = f"{text}, cute cartoon sticker, bold outlines, colorful vector art, white background"
 
-    # Make background transparent (assumes white bg)
+    # Use autocast for speed + efficiency
+    with torch.autocast(device_type=device, dtype=torch.float16 if device == "cuda" else torch.float32):
+        result = pipe(prompt, height=384, width=384, num_inference_steps=12)
+
+    image = result.images[0]
     image_transparent = make_transparent(image)
 
-    # Save file
-    file_path = OUTPUT_DIR / "generated_sticker.png"
+    file_path = OUTPUT_DIR / f"generated_sticker_{len(list(OUTPUT_DIR.glob('generated_sticker_*.png'))) + 1}.png"
     image_transparent.save(file_path)
 
     return FileResponse(file_path, media_type="image/png")
 
-# Image Upload → Sticker
+# ------------------------------
+# IMAGE → STICKER
+# ------------------------------
 @app.post("/upload_image")
 async def upload_image(image: UploadFile = File(...)):
-    """
-    Accepts an uploaded image, removes background, resizes to 512x512
-    """
     img = Image.open(io.BytesIO(await image.read())).convert("RGBA")
-
-    # Make background transparent
     img_transparent = make_transparent(img)
+    img_resized = img_transparent.resize((384, 384))
 
-    # Resize to 512x512
-    img_resized = img_transparent.resize((512, 512))
     file_path = OUTPUT_DIR / f"uploaded_{image.filename}"
     img_resized.save(file_path)
 
     return FileResponse(file_path, media_type="image/png")
 
+# ------------------------------
+# VOICE → STICKER
+# ------------------------------
+@app.post("/generate_sticker_from_voice")
+async def generate_sticker_from_voice(voice: UploadFile = File(...)):
+    # Read the uploaded voice file into memory
+    voice_bytes = await voice.read()
+    voice_buffer = io.BytesIO(voice_bytes)
 
+    # Transcribe using Whisper directly from bytes
+    result = speech2text(voice_buffer)
+    transcribed_text = result["text"]
+
+    # Create sticker prompt
+    prompt = f"{transcribed_text}, cartoon style sticker, bold outlines, colorful vector, white background"
+    
+    # Generate sticker
+    with torch.autocast(device_type=device, dtype=torch.float16 if device == "cuda" else torch.float32):
+        result = pipe(prompt, height=384, width=384, num_inference_steps=12)
+
+    image = result.images[0]
+    image_transparent = make_transparent(image)
+
+    # Save sticker
+    file_path = OUTPUT_DIR / f"voice_generated_sticker_{len(list(OUTPUT_DIR.glob('voice_generated_sticker_*.png'))) + 1}.png"
+    image_transparent.save(file_path)
+
+    return FileResponse(file_path, media_type="image/png")
 
 # py -m uvicorn main:app --reload  
