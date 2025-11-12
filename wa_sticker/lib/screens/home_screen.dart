@@ -3,7 +3,6 @@ import 'dart:async';
 import 'dart:html' as html;
 
 import 'package:flutter/material.dart';
-import 'package:image_picker/image_picker.dart';
 
 import '../services/api_service.dart';
 import '../widgets/sticker_card.dart';
@@ -20,19 +19,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Uint8List? _stickerBytes;
   bool isLoading = false;
 
-  // Voice recording states
-  bool _isRecording = false;
-  int _recordSeconds = 0;
-  Timer? _timer;
-  html.MediaRecorder? _mediaRecorder;
-  final List<html.Blob> _chunks = [];
-
-  @override
-  void dispose() {
-    _textController.dispose();
-    _timer?.cancel();
-    super.dispose();
-  }
+  
 
   /// ----------------------------
   /// Text → Sticker
@@ -69,67 +56,7 @@ class _HomeScreenState extends State<HomeScreen> {
   /// ----------------------------
   /// Voice → Sticker (Web)
   /// ----------------------------
-  Future<void> generateVoiceSticker() async {
-    if (_isRecording) return;
-
-    final stream = await html.window.navigator.mediaDevices!
-        .getUserMedia({'audio': true});
-
-    _chunks.clear();
-    _mediaRecorder = html.MediaRecorder(stream);
-
-    // Listen to dataavailable via addEventListener
-    _mediaRecorder!.addEventListener('dataavailable', (event) {
-      final e = event as html.BlobEvent;
-      if (e.data != null) _chunks.add(e.data!);
-    });
-
-    // Listen to stop event
-    _mediaRecorder!.addEventListener('stop', (event) async {
-      if (_chunks.isEmpty) {
-        setState(() {
-          _isRecording = false;
-        });
-        return;
-      }
-
-      final blob = html.Blob(_chunks, 'audio/wav');
-      setState(() => isLoading = true);
-      final stickerBytes = await ApiService.generateStickerFromVoice(blob);
-      setState(() {
-        _stickerBytes = stickerBytes;
-        _isRecording = false;
-        isLoading = false;
-      });
-    });
-
-    _mediaRecorder!.start();
-    _startTimer();
-    setState(() => _isRecording = true);
-  }
-
-  void stopWebRecording() {
-    if (_mediaRecorder != null && _isRecording) {
-      _mediaRecorder!.stop();
-      _timer?.cancel();
-      _recordSeconds = 0;
-      setState(() => _isRecording = false);
-    }
-  }
-
-  void _startTimer() {
-    _recordSeconds = 0;
-    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      setState(() => _recordSeconds++);
-    });
-  }
-
-  String get _formattedTime {
-    final m = (_recordSeconds ~/ 60).toString().padLeft(2, '0');
-    final s = (_recordSeconds % 60).toString().padLeft(2, '0');
-    return '$m:$s';
-  }
-
+  
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -171,17 +98,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   label: const Text("Upload Image"),
                   onPressed: generateImageSticker,
                 ),
-                ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: _isRecording ? Colors.red : Colors.deepPurple,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  icon: Icon(_isRecording ? Icons.stop : Icons.mic),
-                  label: Text(_isRecording ? _formattedTime : "Record Voice"),
-                  onPressed: _isRecording ? stopWebRecording : generateVoiceSticker,
-                ),
+               
               ],
             ),
             const SizedBox(height: 30),

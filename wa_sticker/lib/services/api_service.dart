@@ -6,76 +6,85 @@ import 'package:http_parser/http_parser.dart';
 class ApiService {
   static const String baseUrl = "http://127.0.0.1:8000";
 
+  // ---------------------------
+  // TEXT → STICKER
+  // ---------------------------
   static Future<Uint8List?> generateStickerFromText(String text) async {
     final uri = Uri.parse("$baseUrl/generate_sticker");
     final request = http.MultipartRequest("POST", uri)..fields['text'] = text;
-    final response = await request.send();
-    if (response.statusCode == 200) {
-      return await response.stream.toBytes();
+
+    try {
+      final response = await request.send();
+      final bytes = await response.stream.toBytes();
+
+      if (response.statusCode == 200) {
+        if (_isJsonError(bytes)) return null;
+        return bytes;
+      } else {
+        print("❌ Server returned ${response.statusCode}");
+        return null;
+      }
+    } catch (e) {
+      print("❌ Network error: $e");
+      return null;
     }
-    return null;
   }
 
+  // ---------------------------
+  // IMAGE → STICKER
+  // ---------------------------
   static Future<Uint8List?> generateStickerFromImage(html.File file) async {
-    final reader = html.FileReader();
-    reader.readAsArrayBuffer(file);
-    await reader.onLoad.first;
+    try {
+      final reader = html.FileReader();
+      reader.readAsArrayBuffer(file);
+      await reader.onLoad.first;
 
-    // Fix for NativeUint8List vs ByteBuffer
-    Uint8List bytes;
-    if (reader.result is Uint8List) {
-      bytes = reader.result as Uint8List;
-    } else if (reader.result is ByteBuffer) {
-      bytes = Uint8List.view(reader.result as ByteBuffer);
-    } else {
-      throw Exception("Unsupported FileReader result type");
+      final bytes = _normalizeBytes(reader.result);
+      final uri = Uri.parse("$baseUrl/upload_image");
+      final request = http.MultipartRequest("POST", uri);
+
+      request.files.add(http.MultipartFile.fromBytes(
+        'image',
+        bytes,
+        filename: file.name,
+        contentType: MediaType('image', 'png'),
+      ));
+
+      final response = await request.send();
+      final responseBytes = await response.stream.toBytes();
+
+      if (response.statusCode == 200) {
+        if (_isJsonError(responseBytes)) return null;
+        return responseBytes;
+      } else {
+        print("❌ Server returned ${response.statusCode}");
+        return null;
+      }
+    } catch (e) {
+      print("❌ Error uploading image: $e");
+      return null;
     }
-
-    final uri = Uri.parse("$baseUrl/upload_image");
-    final request = http.MultipartRequest("POST", uri);
-    request.files.add(http.MultipartFile.fromBytes(
-      'image',
-      bytes,
-      filename: file.name,
-      contentType: MediaType('image', 'png'),
-    ));
-
-    final response = await request.send();
-    if (response.statusCode == 200) {
-      return await response.stream.toBytes();
-    }
-    return null;
   }
 
-  static Future<Uint8List?> generateStickerFromVoice(html.Blob blob) async {
-    if (blob == null) return null;
+  // ---------------------------
+  // VOICE → TEXT → STICKER
+  // ---------------------------
+ 
+  // ---------------------------
+  // Helpers
+  // ---------------------------
+  static Uint8List _normalizeBytes(dynamic data) {
+    if (data is Uint8List) return data;
+    if (data is ByteBuffer) return Uint8List.view(data);
+    throw Exception("Unsupported FileReader result type: ${data.runtimeType}");
+  }
 
-    final reader = html.FileReader();
-    reader.readAsArrayBuffer(blob);
-    await reader.onLoad.first;
-
-    Uint8List bytes;
-    if (reader.result is Uint8List) {
-      bytes = reader.result as Uint8List;
-    } else if (reader.result is ByteBuffer) {
-      bytes = Uint8List.view(reader.result as ByteBuffer);
-    } else {
-      throw Exception("Unsupported FileReader result type");
+  static bool _isJsonError(Uint8List bytes) {
+    try {
+      final str = String.fromCharCodes(bytes);
+      return str.startsWith('{') && str.contains('"error"');
+    } catch (_) {
+      return false;
     }
-
-    final uri = Uri.parse("$baseUrl/generate_sticker_from_voice");
-    final request = http.MultipartRequest("POST", uri);
-    request.files.add(http.MultipartFile.fromBytes(
-      'voice',
-      bytes,
-      filename: 'voice.wav',
-      contentType: MediaType('audio', 'wav'),
-    ));
-
-    final response = await request.send();
-    if (response.statusCode == 200) {
-      return await response.stream.toBytes();
-    }
-    return null;
   }
 }
