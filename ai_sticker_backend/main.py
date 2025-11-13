@@ -8,7 +8,7 @@ import torch
 from diffusers import StableDiffusionPipeline
 import numpy as np
 from transformers import pipeline
-import soundfile as sf  # only this is needed for audio
+import soundfile as sf 
 
 # -----------------------------
 # App setup
