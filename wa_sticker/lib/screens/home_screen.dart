@@ -1,9 +1,7 @@
 import 'dart:typed_data';
-import 'dart:async';
 import 'dart:html' as html;
 
 import 'package:flutter/material.dart';
-
 import '../services/api_service.dart';
 import '../widgets/sticker_card.dart';
 
@@ -18,8 +16,6 @@ class _HomeScreenState extends State<HomeScreen> {
   final TextEditingController _textController = TextEditingController();
   Uint8List? _stickerBytes;
   bool isLoading = false;
-
-  
 
   /// ----------------------------
   /// Text → Sticker
@@ -54,15 +50,33 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   /// ----------------------------
-  /// Voice → Sticker (Web)
+  /// Voice → Sticker
   /// ----------------------------
-  
+  Future<void> generateVoiceSticker() async {
+    final htmlInput = html.FileUploadInputElement()..accept = 'audio/*';
+    htmlInput.onChange.listen((_) async {
+      final file = htmlInput.files?.first;
+      if (file == null) return;
+      setState(() => isLoading = true);
+
+      final stickerBytes = await ApiService.generateStickerFromVoice(file);
+      setState(() {
+        _stickerBytes = stickerBytes;
+        isLoading = false;
+      });
+    });
+    htmlInput.click();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.grey[100],
       appBar: AppBar(
-        title: const Text("AI Sticker Generator"),
+        title: const Text(
+          "AI Sticker Generator",
+          style: TextStyle(color: Colors.white),
+        ),
         centerTitle: true,
         backgroundColor: Colors.deepPurple,
       ),
@@ -70,6 +84,7 @@ class _HomeScreenState extends State<HomeScreen> {
         padding: const EdgeInsets.all(20),
         child: Column(
           children: [
+            // Text input
             TextField(
               controller: _textController,
               decoration: InputDecoration(
@@ -84,6 +99,8 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
             const SizedBox(height: 20),
+
+            // Buttons for Image & Voice
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
@@ -95,13 +112,31 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                   ),
                   icon: const Icon(Icons.image),
-                  label: const Text("Upload Image"),
+                  label: const Text(
+                    "Upload Image",
+                    style: TextStyle(color: Colors.white),
+                  ),
                   onPressed: generateImageSticker,
                 ),
-               
+                ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.deepPurple,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  icon: const Icon(Icons.mic),
+                  label: const Text(
+                    "Upload Voice",
+                    style: TextStyle(color: Colors.white),
+                  ),
+                  onPressed: generateVoiceSticker,
+                ),
               ],
             ),
             const SizedBox(height: 30),
+
+            // Sticker display
             if (isLoading)
               const CircularProgressIndicator()
             else if (_stickerBytes != null)

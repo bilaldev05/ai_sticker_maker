@@ -67,9 +67,41 @@ class ApiService {
   }
 
   // ---------------------------
-  // VOICE → TEXT → STICKER
+  // VOICE → STICKER
   // ---------------------------
- 
+  static Future<Uint8List?> generateStickerFromVoice(html.File file) async {
+    try {
+      final reader = html.FileReader();
+      reader.readAsArrayBuffer(file);
+      await reader.onLoad.first;
+
+      final bytes = _normalizeBytes(reader.result);
+      final uri = Uri.parse("$baseUrl/generate_sticker_from_voice");
+      final request = http.MultipartRequest("POST", uri);
+
+      request.files.add(http.MultipartFile.fromBytes(
+        'voice',
+        bytes,
+        filename: file.name,
+        contentType: MediaType('audio', 'wav'), // adjust if mp3
+      ));
+
+      final response = await request.send();
+      final responseBytes = await response.stream.toBytes();
+
+      if (response.statusCode == 200) {
+        if (_isJsonError(responseBytes)) return null;
+        return responseBytes;
+      } else {
+        print("❌ Server returned ${response.statusCode}");
+        return null;
+      }
+    } catch (e) {
+      print("❌ Error uploading voice: $e");
+      return null;
+    }
+  }
+
   // ---------------------------
   // Helpers
   // ---------------------------
