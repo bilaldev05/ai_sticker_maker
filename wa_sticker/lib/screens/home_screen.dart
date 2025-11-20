@@ -17,9 +17,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Uint8List? _stickerBytes;
   bool isLoading = false;
 
-  /// ----------------------------
-  /// Text → Sticker
-  /// ----------------------------
+  
   Future<void> generateTextSticker() async {
     if (_textController.text.isEmpty) return;
     setState(() => isLoading = true);
