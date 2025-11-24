@@ -47,9 +47,7 @@ class _HomeScreenState extends State<HomeScreen> {
     htmlInput.click();
   }
 
-  /// ----------------------------
-  /// Voice → Sticker
-  /// ----------------------------
+  
   Future<void> generateVoiceSticker() async {
     final htmlInput = html.FileUploadInputElement()..accept = 'audio/*';
     htmlInput.onChange.listen((_) async {
