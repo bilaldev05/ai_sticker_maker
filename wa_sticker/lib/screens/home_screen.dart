@@ -96,7 +96,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             const SizedBox(height: 20),
 
-            // Buttons for Image & Voice
+            
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
