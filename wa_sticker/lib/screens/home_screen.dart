@@ -132,7 +132,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             const SizedBox(height: 30),
 
-            // Sticker display
+            
             if (isLoading)
               const CircularProgressIndicator()
             else if (_stickerBytes != null)
