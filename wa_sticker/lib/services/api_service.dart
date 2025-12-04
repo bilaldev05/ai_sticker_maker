@@ -102,7 +102,7 @@ class ApiService {
     }
   }
 
-  // ---------------------------
+  
   // Helpers
   // ---------------------------
   static Uint8List _normalizeBytes(dynamic data) {
