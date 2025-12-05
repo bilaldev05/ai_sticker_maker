@@ -104,7 +104,7 @@ class ApiService {
 
   
   // Helpers
-  // ---------------------------
+  
   static Uint8List _normalizeBytes(dynamic data) {
     if (data is Uint8List) return data;
     if (data is ByteBuffer) return Uint8List.view(data);
