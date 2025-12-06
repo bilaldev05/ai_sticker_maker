@@ -66,7 +66,7 @@ class ApiService {
     }
   }
 
-  // ---------------------------
+  
   // VOICE → STICKER
   // ---------------------------
   static Future<Uint8List?> generateStickerFromVoice(html.File file) async {
